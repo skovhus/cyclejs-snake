@@ -1,22 +1,39 @@
 import Cycle from '@cycle/core';
-import {div, label, input, hr, h1, makeDOMDriver} from '@cycle/dom';
+import {div, label, input, span, h1, makeDOMDriver} from '@cycle/dom';
+import {Observable} from 'rx';
+
 
 function main(sources) {
-  return {
-    DOM: sources.DOM.select('.myinput').events('input')
-      .map(ev => ev.target.value)
-      .startWith('')
-      .map(name =>
-        div([
-          label('Name:'),
-          input('.myinput', {attributes: {type: 'text'}}),
-          hr(),
-          h1(`Hello ${name}`)
-        ])
-      )
-  };
+
+    const keydown$ = sources.Keydown
+        .map(e => e.code);
+
+    const keyup$ = sources.Keyup
+        .map(e => e.code);
+
+    return {
+        DOM: Observable.of(
+            div([
+                div([
+                    span('down: '),
+
+                    keydown$
+                        .map(i => span(i + '')),
+
+                ]),
+                div([
+                    span('up: '),
+
+                    keyup$
+                        .map(i => span(i))
+                ]),
+            ])
+        )
+    };
 }
 
 Cycle.run(main, {
-  DOM: makeDOMDriver('#main-container')
+    DOM: makeDOMDriver('#main-container'),
+    Keydown: () => Observable.fromEvent(document, 'keydown'),
+    Keyup: () => Observable.fromEvent(document, 'keyup'),
 });
