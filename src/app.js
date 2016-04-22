@@ -2,27 +2,44 @@ import Cycle from '@cycle/core';
 import {div, label, input, span, h1, makeDOMDriver} from '@cycle/dom';
 import {Observable} from 'rx';
 
-
 function main(sources) {
-    const keydown$ = sources.Keydown
-        .map(e => e.code);
-
     const keyup$ = sources.Keyup
-        .map(e => e.code);
+        .filter(e => e.code === 'ArrowLeft' || 'ArrowRight')
+        .map(e => ({ key: e.code, type: 'UP' }));
 
-    const state$ = Observable.combineLatest(
-        keydown$,
-        keyup$,
-        (down, up) => {
-            return { up, down };
+    const keydown$ = sources.Keydown
+        .filter(e => e.code === 'ArrowLeft' || 'ArrowRight')
+        .map(e => {
+            return { key: e.code, type: 'DOWN' }
+        });
+
+    const areKeysDown$ = Observable
+        .merge(keyup$, keydown$)
+        .scan((areKeysDown, currentEvent) => Object.assign({}, areKeysDown, {
+            [currentEvent.key]: currentEvent.type === 'DOWN',
+        }), {})
+        .startWith({});
+
+    const state$ = areKeysDown$.map(areKeysDown => {
+        let direction = 'FORWARD';
+        if(areKeysDown['ArrowLeft'] && !areKeysDown['ArrowRight']) {
+            direction = 'LEFT';
+        } else if(!areKeysDown['ArrowLeft'] && areKeysDown['ArrowRight']) {
+            direction = 'RIGHT';
         }
-    ).startWith({ up: 'none', down: 'none' });
+        return {
+            left: areKeysDown['ArrowLeft'],
+            right: areKeysDown['ArrowRight'],
+            direction
+        };
+    });
 
     return {
-        DOM: state$.map(({ up, down }) =>
+        DOM: state$.map(({left, right, direction}) =>
             div([
-                div(`down: ${down}`),
-                div(`up: ${up}`),
+                div(span(`left: ${left}`)),
+                div(span(`right: ${right}`)),
+                div(span(`direction: ${direction}`)),
             ])
         )
     };
