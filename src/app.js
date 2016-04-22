@@ -4,29 +4,25 @@ import {Observable} from 'rx';
 
 
 function main(sources) {
-
     const keydown$ = sources.Keydown
         .map(e => e.code);
 
     const keyup$ = sources.Keyup
         .map(e => e.code);
 
+    const state$ = Observable.combineLatest(
+        keydown$,
+        keyup$,
+        (down, up) => {
+            return { up, down };
+        }
+    ).startWith({ up: 'none', down: 'none' });
+
     return {
-        DOM: Observable.of(
+        DOM: state$.map(({ up, down }) =>
             div([
-                div([
-                    span('down: '),
-
-                    keydown$
-                        .map(i => span(i + '')),
-
-                ]),
-                div([
-                    span('up: '),
-
-                    keyup$
-                        .map(i => span(i))
-                ]),
+                div(`down: ${down}`),
+                div(`up: ${up}`),
             ])
         )
     };
