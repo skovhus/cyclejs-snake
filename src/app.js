@@ -1,29 +1,22 @@
-import Cycle                from '@cycle/core';
-import {makeDOMDriver}      from '@cycle/dom';
-import {makeHistoryDriver}  from '@cycle/history';
-import Rx                   from 'rx';
-import Main                 from './main'
+import Cycle from '@cycle/core';
+import {div, label, input, hr, h1, makeDOMDriver} from '@cycle/dom';
 
-// we are pulling in our css files here for webpack to compile
-require("!style!css!styles/pure-min.css");
-require("!style!css!styles/layout.css");
-require("!style!css!styles/grids-responsive-min.css");
-
-// creating our mainApp from /.main
-function mainApp(sources) {
-  let sinks = Main(sources);
-  return sinks
+function main(sources) {
+  return {
+    DOM: sources.DOM.select('.myinput').events('input')
+      .map(ev => ev.target.value)
+      .startWith('')
+      .map(name =>
+        div([
+          label('Name:'),
+          input('.myinput', {attributes: {type: 'text'}}),
+          hr(),
+          h1(`Hello ${name}`)
+        ])
+      )
+  };
 }
 
-//const Props = Main(sources).Props
-// this is the Cycle run. first argument is our mainApp then an object:
-// DOM is the ID or class we want the cycle to render onto our page
-// History is using our makeHistoryDriver to deal with routing
-const sources = {
-  DOM: makeDOMDriver('#application'),
-  History: makeHistoryDriver({hash: false, queries: true}),
-  Props: () => Rx.Observable.just(0)
-
-};
-
-Cycle.run(mainApp,sources);
+Cycle.run(main, {
+  DOM: makeDOMDriver('#main-container')
+});
