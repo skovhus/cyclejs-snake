@@ -26,12 +26,12 @@ function drawWorld(state) {
     );
 }
 
-function main(sources) {
-    const keyup$ = sources.Keyup
+function intent(Keyup, Keydown) {
+    const keyup$ = Keyup
         .filter(e => e.code === 'ArrowLeft' || 'ArrowRight')
         .map(e => ({ key: e.code, type: 'UP' }));
 
-    const keydown$ = sources.Keydown
+    const keydown$ = Keydown
         .filter(e => e.code === 'ArrowLeft' || 'ArrowRight')
         .map(e => {
             return { key: e.code, type: 'DOWN' }
@@ -60,7 +60,13 @@ function main(sources) {
 
     const animation$ = Observable.interval(1000 / FPS, requestAnimationFrame);
 
-    const state$ = animation$.withLatestFrom(keysState$, (_animationTick, keysState) => {
+    return {
+        animation$, keysState$
+    }
+}
+
+function model(animation$, keysState$) {
+    return animation$.withLatestFrom(keysState$, (_animationTick, keysState) => {
         return keysState;
     })
     .scan((previousState, keysState) => {
@@ -98,6 +104,12 @@ function main(sources) {
             trail: newTrail,
         };
     }, {trail: [[20, 50]], snake: {x: 20, y: 50, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
+}
+
+function main(sources) {
+    const {animation$, keysState$} = intent(sources.Keyup, sources.Keydown);
+
+    const state$ = model(animation$, keysState$);
 
     return {
         DOM: state$.map(state =>
