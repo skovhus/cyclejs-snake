@@ -3,9 +3,19 @@ import {h, makeDOMDriver} from '@cycle/dom';
 import {Observable} from 'rx';
 import requestAnimationFrame from 'raf';
 
-const FPS = 160;
-const SCALE = 2;
+import getArc from './getArc';
+import getSvgPath from './getSvgPath';
+
+const FPS = 60;
+const SCALE = 1; // FIXME
 const MAP_SIZE = 500;
+
+const STEP = 1;
+const CURVE_RADIUS = 30;
+
+const DIRECTION_RIGHT = 1;
+const DIRECTION_LEFT = -1;
+const DIRECTION_FORWARD = 0;
 
 function drawWorld(state) {
     return h('svg',
@@ -16,14 +26,11 @@ function drawWorld(state) {
                 height: MAP_SIZE * SCALE,
             }
         },
-        state.trail.map(t =>
-            h('rect', {
+        state.trail.map(pathD =>
+            h('path', {
                 attrs: {
+                    d: pathD,
                     class: 'snake',
-                    x: t[0] * SCALE,
-                    y: t[1] * SCALE,
-                    width: SCALE,
-                    height: SCALE,
                 }
             })
         )
@@ -49,11 +56,11 @@ function intent(Keyup, Keydown) {
         .startWith({});
 
     const keysState$ = areKeysDown$.map(areKeysDown => {
-        let direction = 'FORWARD';
+        let direction = DIRECTION_FORWARD;
         if(areKeysDown['ArrowLeft'] && !areKeysDown['ArrowRight']) {
-            direction = 'LEFT';
+            direction = DIRECTION_LEFT;
         } else if(!areKeysDown['ArrowLeft'] && areKeysDown['ArrowRight']) {
-            direction = 'RIGHT';
+            direction = DIRECTION_RIGHT;
         }
         return {
             left: areKeysDown['ArrowLeft'],
@@ -77,27 +84,38 @@ function model(animation$, keysState$) {
         const now = new Date();
         const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
 
+        const currentSnake = previousState.snake;
         const newTrail = previousState.trail;
         const newSnake = Object.assign({}, previousState.snake);
+        const snakePoint = {x: newSnake.x, y: newSnake.y};
+
+        let pathD;
         let dead = false;
 
-        if(keysState.direction === 'RIGHT') {
-            newSnake.vx = previousState.snake.vy;
-            newSnake.vy = -previousState.snake.vx;
-        } else if(keysState.direction === 'LEFT') {
-            newSnake.vx = -previousState.snake.vy;
-            newSnake.vy = previousState.snake.vx;
-        }
-        newSnake.x += newSnake.vx;
-        newSnake.y += newSnake.vy;
+        if(keysState.direction === DIRECTION_FORWARD) {
+            newSnake.x = currentSnake.x + currentSnake.vx * STEP;
+            newSnake.y = currentSnake.y + currentSnake.vy * STEP;
+            pathD = `M ${currentSnake.x} ${currentSnake.y} A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
+        } else {
+            // Turn
+            const velocity = {
+                x: newSnake.vx,
+                y: newSnake.vy
+            };
 
-        if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE-1 || newSnake.y > MAP_SIZE-1 ) {
-            // FIXME: kill the stream
-            newSnake.vx = 0;
-            newSnake.xy = 0;
+            const arc = getArc(CURVE_RADIUS, STEP, keysState.direction, velocity, snakePoint);
+            pathD = getSvgPath(CURVE_RADIUS, currentSnake, arc.Pa, arc.startAngle, arc.endAngle);
+
+            newSnake.x = arc.Pa.x;
+            newSnake.y = arc.Pa.y;
+            newSnake.vx = arc.Va.x;
+            newSnake.vy = arc.Va.y;
+        }
+
+        if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE || newSnake.y > MAP_SIZE ) {
             dead = true;
         } else {
-            newTrail.push([newSnake.x, newSnake.y]);
+            newTrail.push(pathD);
         }
 
         return {
@@ -107,7 +125,7 @@ function model(animation$, keysState$) {
             snake: newSnake,
             trail: newTrail,
         };
-    }, {trail: [[20, 50]], snake: {x: 20, y: 50, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
+    }, {trail: [], snake: {x: 100, y: 100, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
 }
 
 function main(sources) {
