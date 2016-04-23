@@ -8,7 +8,7 @@ import getSvgPath from './getSvgPath';
 
 const FPS = 60;
 const SCALE = 1; // FIXME
-const MAP_SIZE = 500;
+const MAP_SIZE = 1000;
 
 const STEP = 3;
 const CURVE_RADIUS = 30;
@@ -17,126 +17,167 @@ const DIRECTION_RIGHT = -1;
 const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
 
-function drawWorld(state) {
-    console.log(state.trail.join(' '))
+function drawWorld(playersState) {
     return h('svg',
         {
             attrs: {
-                class: 'game-map' + (state.dead ? ' game-map--dead' : ''),
+                class: 'game-map',
                 width: MAP_SIZE * SCALE,
                 height: MAP_SIZE * SCALE,
             }
         },
-        [h('path', {
-            attrs: {
-                d: state.trail.join(' '),
-                class: 'snake',
-            }
-        })]
+        playersState.map(playerState =>
+            h('path', {
+                attrs: {
+                    d: playerState.trail.join(' '),
+                    style: `stroke: ${playerState.snake.color}`,
+                    class: 'snake',
+                }
+            })
+        )
     );
 }
 
-function intent(Keyup, Keydown) {
-    const keyup$ = Keyup
-        .filter(e => e.code === 'ArrowLeft' || 'ArrowRight')
-        .map(e => ({ key: e.code, type: 'UP' }));
+const SNAKES_DATA = [
+    {
+        name: 'maciej',
+        color: 'red',
+        startPoint: {x: 100, y: 100},
+        startVelocity: {x: 1, y: 0},
+        keys: {
+            left: 'ArrowLeft',
+            right: 'ArrowRight',
+        }
+    },
+    {
+        name: 'kenneth',
+        color: 'yellow',
+        startPoint: {x: 150, y: 150},
+        startVelocity: {x: 0, y: 1},
+        keys: {
+            left: 'KeyS',
+            right: 'KeyD',
+        }
+    }
+]
 
-    const keydown$ = Keydown
-        .filter(e => e.code === 'ArrowLeft' || 'ArrowRight')
-        .map(e => {
-            return { key: e.code, type: 'DOWN' }
+function intent(Keyup, Keydown) {
+    const snakes = SNAKES_DATA.map(snake => {
+        const keyup$ = Keyup
+            .filter(e => e.code === snake.keys.left || snake.keys.right)
+            .map(e => ({ key: e.code, type: 'UP' }));
+        const keydown$ = Keydown
+            .filter(e => e.code === snake.keys.left || snake.keys.right)
+            .map(e => {
+                return { key: e.code, type: 'DOWN' }
+            });
+
+        const areKeysDown$ = Observable
+            .merge(keyup$, keydown$)
+            .scan((areKeysDown, currentEvent) => Object.assign({}, areKeysDown, {
+                [currentEvent.key]: currentEvent.type === 'DOWN',
+            }), {})
+            .startWith({});
+
+        const playerKeys$ = areKeysDown$.map(areKeysDown => {
+            let direction = DIRECTION_FORWARD;
+            if(areKeysDown[snake.keys.left] && !areKeysDown[snake.keys.right]) {
+                direction = DIRECTION_LEFT;
+            } else if(!areKeysDown[snake.keys.left] && areKeysDown[snake.keys.right]) {
+                direction = DIRECTION_RIGHT;
+            }
+            return {
+                left: areKeysDown[snake.keys.left],
+                right: areKeysDown[snake.keys.right],
+                direction
+            };
         });
 
-    const areKeysDown$ = Observable
-        .merge(keyup$, keydown$)
-        .scan((areKeysDown, currentEvent) => Object.assign({}, areKeysDown, {
-            [currentEvent.key]: currentEvent.type === 'DOWN',
-        }), {})
-        .startWith({});
-
-    const keysState$ = areKeysDown$.map(areKeysDown => {
-        let direction = DIRECTION_FORWARD;
-        if(areKeysDown['ArrowLeft'] && !areKeysDown['ArrowRight']) {
-            direction = DIRECTION_LEFT;
-        } else if(!areKeysDown['ArrowLeft'] && areKeysDown['ArrowRight']) {
-            direction = DIRECTION_RIGHT;
-        }
-        return {
-            left: areKeysDown['ArrowLeft'],
-            right: areKeysDown['ArrowRight'],
-            direction
-        };
-    });
+        return Object.assign({}, snake, { keys$: playerKeys$ });
+    })
 
     const animation$ = Observable.interval(1000 / FPS, requestAnimationFrame);
 
     return {
-        animation$, keysState$
+        animation$, snakes
     }
 }
 
-function model(animation$, keysState$) {
-    return animation$.withLatestFrom(keysState$, (_animationTick, keysState) => {
-        return keysState;
-    })
-    .scan((previousState, keysState) => {
-        const now = new Date();
-        const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
+function model(animation$, snakes) {
+    return snakes.map(snake => {
+        return animation$.withLatestFrom(snake.keys$, (_animationTick, keysState) => keysState)
+        .scan((previousState, keysState) => {
+            const now = new Date();
+            const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
 
-        const currentSnake = previousState.snake;
-        const newTrail = previousState.trail;
-        const newSnake = Object.assign({}, previousState.snake);
-        const snakePoint = {x: newSnake.x, y: newSnake.y};
+            const currentSnake = previousState.snake;
+            const newTrail = previousState.trail;
+            const newSnake = Object.assign({}, previousState.snake);
+            const snakePoint = {x: newSnake.x, y: newSnake.y};
 
-        let pathD;
-        let dead = false;
+            let pathD;
+            let dead = false;
 
-        if(keysState.direction === DIRECTION_FORWARD) {
-            newSnake.x = currentSnake.x + currentSnake.vx * STEP;
-            newSnake.y = currentSnake.y + currentSnake.vy * STEP;
-            pathD = `A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
-        } else {
-            // Turn
-            const velocity = {
-                x: newSnake.vx,
-                y: newSnake.vy
+            if(keysState.direction === DIRECTION_FORWARD) {
+                newSnake.x = currentSnake.x + currentSnake.vx * STEP;
+                newSnake.y = currentSnake.y + currentSnake.vy * STEP;
+                pathD = `A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
+            } else {
+                // Turn
+                const velocity = {
+                    x: newSnake.vx,
+                    y: newSnake.vy
+                };
+
+                const arc = getArc(CURVE_RADIUS, STEP, keysState.direction, velocity, snakePoint);
+                pathD = getSvgPath(CURVE_RADIUS, arc.Pa, arc.startAngle, arc.endAngle);
+
+                newSnake.x = arc.Pa.x;
+                newSnake.y = arc.Pa.y;
+                newSnake.vx = arc.Va.x;
+                newSnake.vy = arc.Va.y;
+            }
+
+            if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE || newSnake.y > MAP_SIZE ) {
+                dead = true;
+            } else {
+                newTrail.push(pathD);
+            }
+
+            return {
+                dead: dead,
+                fps: fps,
+                lastTick: now,
+                snake: newSnake,
+                trail: newTrail,
             };
-
-            const arc = getArc(CURVE_RADIUS, STEP, keysState.direction, velocity, snakePoint);
-            pathD = getSvgPath(CURVE_RADIUS, arc.Pa, arc.startAngle, arc.endAngle);
-
-            newSnake.x = arc.Pa.x;
-            newSnake.y = arc.Pa.y;
-            newSnake.vx = arc.Va.x;
-            newSnake.vy = arc.Va.y;
-        }
-
-        if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE || newSnake.y > MAP_SIZE ) {
-            dead = true;
-        } else {
-            newTrail.push(pathD);
-        }
-
-        return {
-            dead: dead,
-            fps: fps,
-            lastTick: now,
-            snake: newSnake,
-            trail: newTrail,
-        };
-    }, {trail: ['M 100 100'], snake: {x: 100, y: 100, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
+        }, {
+            trail: [`M ${snake.startPoint.x} ${snake.startPoint.y}`],
+            snake: {
+                x: snake.startPoint.x,
+                y: snake.startPoint.y,
+                vx: snake.startVelocity.x,
+                vy: snake.startVelocity.y,
+                name: snake.name,
+                color: snake.color,
+            },
+            lastTick: new Date(),
+            fps: 0
+        });
+    })
 }
 
 function main(sources) {
-    const {animation$, keysState$} = intent(sources.Keyup, sources.Keydown);
+    const { animation$, snakes } = intent(sources.Keyup, sources.Keydown);
+    const playersStates = model(animation$, snakes);
 
-    const state$ = model(animation$, keysState$);
+    const snakes$ = Observable.combineLatest(...playersStates).map(playersState => drawWorld(playersState))
 
     return {
-        DOM: state$.map(state =>
+        DOM: snakes$.map(snakes =>
             h('div', [
-                h('div', {props: {className: 'fps'}}, 'FPS: ' + state.fps),
-                drawWorld(state)
+                // h('div', {props: {className: 'fps'}}, 'FPS: ' + state.fps),
+                snakes
             ])
         )
     };
