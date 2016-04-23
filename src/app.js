@@ -10,11 +10,11 @@ const FPS = 60;
 const SCALE = 1; // FIXME
 const MAP_SIZE = 500;
 
-const STEP = 1;
+const STEP = 3;
 const CURVE_RADIUS = 30;
 
-const DIRECTION_RIGHT = 1;
-const DIRECTION_LEFT = -1;
+const DIRECTION_RIGHT = -1;
+const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
 
 function drawWorld(state) {

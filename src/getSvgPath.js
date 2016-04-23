@@ -8,8 +8,6 @@ function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
 }
 
 export default function describeArc(radius, P, Pa, startAngle, endAngle){
-    console.log('>>> describeArc', radius, Pa, startAngle, endAngle);
-
     var arcSweep = endAngle - startAngle <= 180 ? "0" : "1";
 
     var d = [

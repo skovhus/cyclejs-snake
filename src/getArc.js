@@ -1,3 +1,5 @@
+const rad2deg = r => r * (180/Math.PI);
+
 /**
     const P = { x: 50, y: 50};
     const d = 5;
@@ -8,22 +10,6 @@
     console.log(arc);
  */
 export default function(r, step, direction, V, P) {
-    if (typeof r === 'undefined') {
-        throw new Error('getArc: r was undefined');
-    }
-
-    if (typeof step === 'undefined') {
-        throw new Error('getArc: step was undefined');
-    }
-
-    if (typeof direction === 'undefined') {
-        throw new Error('getArc: direction was undefined');
-    }
-
-    console.log('>>> getArc', r, step, direction, V, P);
-
-    const rad2deg = r => r * (180/Math.PI);
-
     const unit = v => ({
         x: v.x / Math.sqrt(v.x*v.x + v.y*v.y),
         y: v.y / Math.sqrt(v.x*v.x + v.y*v.y),
@@ -47,7 +33,7 @@ export default function(r, step, direction, V, P) {
     // const startAngle = Math.acos(Xo.y);
     const startAngle = Xo.x < 0 ? 2*Math.PI - Math.acos(Xo.y) : Math.acos(Xo.y);
 
-    const beta = -step/r;
+    const beta = -direction * step/r;
     const endAngle = -beta + startAngle;
 
     const Pa = {
@@ -61,15 +47,15 @@ export default function(r, step, direction, V, P) {
     });
 
     const Va = {
-        x: CA.y,
-        y: - CA.x,
+        x: CA.y * direction,
+        y: - CA.x * direction,
     };
 
     return {
         startAngle: rad2deg(startAngle),
         endAngle: rad2deg(endAngle),
-        Pc: Pc,
-        Pa: Pa,
-        Va: Va,
+        Pc,
+        Pa,
+        Va,
     };
 };
