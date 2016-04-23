@@ -8,8 +8,8 @@
     "url": "git+https://github.com/skovhus/cyclejs-snake.git"
   },
   "dependencies": {
-    "@cycle/core": "^6.0.0",
-    "@cycle/dom": "^8.0.0",
+    "@cycle/core": "7.0.0-rc4",
+    "@cycle/dom": "10.0.0-rc5",
     "css-loader": "^0.23.0",
     "rx": "^4.0.6"
   },

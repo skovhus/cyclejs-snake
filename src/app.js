@@ -1,26 +1,30 @@
 import Cycle from '@cycle/core';
-import {div, svg, makeDOMDriver} from '@cycle/dom';
+import {h, makeDOMDriver} from '@cycle/dom';
 import {Observable} from 'rx';
 import requestAnimationFrame from 'raf';
 
-const FPS = 60;
+const FPS = 160;
 const SCALE = 2;
 const MAP_SIZE = 500;
 
 function drawWorld(state) {
-    return svg('svg',
+    return h('svg',
         {
-            class: 'game-map' + (state.dead ? ' game-map--dead' : ''),
-            width: MAP_SIZE * SCALE,
-            height: MAP_SIZE * SCALE,
+            attrs: {
+                class: 'game-map' + (state.dead ? ' game-map--dead' : ''),
+                width: MAP_SIZE * SCALE,
+                height: MAP_SIZE * SCALE,
+            }
         },
         state.trail.map(t =>
-            svg('rect', {
-                class: 'snake',
-                x: t[0] * SCALE,
-                y: t[1] * SCALE,
-                width: SCALE,
-                height: SCALE,
+            h('rect', {
+                attrs: {
+                    class: 'snake',
+                    x: t[0] * SCALE,
+                    y: t[1] * SCALE,
+                    width: SCALE,
+                    height: SCALE,
+                }
             })
         )
     );
@@ -71,7 +75,7 @@ function model(animation$, keysState$) {
     })
     .scan((previousState, keysState) => {
         const now = new Date();
-        const fps = Math.round(1000 / (now - previousState.lastTick));
+        const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
 
         const newTrail = previousState.trail;
         const newSnake = Object.assign({}, previousState.snake);
@@ -113,8 +117,8 @@ function main(sources) {
 
     return {
         DOM: state$.map(state =>
-            div([
-                div({className: 'fps'}, 'FPS: ' + state.fps),
+            h('div', [
+                h('div', {props: {className: 'fps'}}, 'FPS: ' + state.fps),
                 drawWorld(state)
             ])
         )
