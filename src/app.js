@@ -48,6 +48,8 @@ function main(sources) {
     .scan((previousState, keysState) => {
         const newMap = previousState.map;
         const newSnake = Object.assign({}, previousState.snake);
+        let dead = false;
+
         if(keysState.direction === 'RIGHT') {
             newSnake.vx = previousState.snake.vy;
             newSnake.vy = -previousState.snake.vx;
@@ -57,10 +59,20 @@ function main(sources) {
         }
         newSnake.x += newSnake.vx;
         newSnake.y += newSnake.vy;
-        newMap[newSnake.x][newSnake.y] = 1;
+
+        if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > newMap.length -1 || newSnake.y > newMap.length -1 ) {
+            // FIXME: kill the stream
+            newSnake.vx = 0;
+            newSnake.xy = 0;
+            dead = true;
+        } else {
+            newMap[newSnake.x][newSnake.y] = 1;
+        }
+
         return {
             map: newMap,
             snake: newSnake,
+            dead: dead,
         };
     }, {map: INITAL_MAP, snake: {x: 20, y: 50, vx: 1, vy: 0}});
 
@@ -68,7 +80,7 @@ function main(sources) {
         DOM: state$.map(state => {
             return svg('svg',
                 {
-                    class: 'game-map',
+                    class: 'game-map' + (state.dead ? ' game-map--dead' : ''),
                     width: MAP_SIZE * SCALE,
                     height: MAP_SIZE * SCALE,
                 },
