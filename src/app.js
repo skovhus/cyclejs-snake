@@ -3,10 +3,28 @@ import {div, svg, makeDOMDriver} from '@cycle/dom';
 import {Observable} from 'rx';
 import requestAnimationFrame from 'raf';
 
-const FPS = 30;
+const FPS = 60;
 const SCALE = 2;
-const MAP_SIZE = 250;
-const INITAL_MAP = Array(MAP_SIZE).fill(0).map(() => Array(MAP_SIZE).fill(0));
+const MAP_SIZE = 500;
+
+function drawWorld(state) {
+    return svg('svg',
+        {
+            class: 'game-map' + (state.dead ? ' game-map--dead' : ''),
+            width: MAP_SIZE * SCALE,
+            height: MAP_SIZE * SCALE,
+        },
+        state.trail.map(t =>
+            svg('rect', {
+                class: 'snake',
+                x: t[0] * SCALE,
+                y: t[1] * SCALE,
+                width: SCALE,
+                height: SCALE,
+            })
+        )
+    );
+}
 
 function main(sources) {
     const keyup$ = sources.Keyup
@@ -46,7 +64,10 @@ function main(sources) {
         return keysState;
     })
     .scan((previousState, keysState) => {
-        const newMap = previousState.map;
+        const now = new Date();
+        const fps = Math.round(1000 / (now - previousState.lastTick));
+
+        const newTrail = previousState.trail;
         const newSnake = Object.assign({}, previousState.snake);
         let dead = false;
 
@@ -60,46 +81,31 @@ function main(sources) {
         newSnake.x += newSnake.vx;
         newSnake.y += newSnake.vy;
 
-        if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > newMap.length -1 || newSnake.y > newMap.length -1 ) {
+        if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE-1 || newSnake.y > MAP_SIZE-1 ) {
             // FIXME: kill the stream
             newSnake.vx = 0;
             newSnake.xy = 0;
             dead = true;
         } else {
-            newMap[newSnake.x][newSnake.y] = 1;
+            newTrail.push([newSnake.x, newSnake.y]);
         }
 
         return {
-            map: newMap,
-            snake: newSnake,
             dead: dead,
+            fps: fps,
+            lastTick: now,
+            snake: newSnake,
+            trail: newTrail,
         };
-    }, {map: INITAL_MAP, snake: {x: 20, y: 50, vx: 1, vy: 0}});
+    }, {trail: [[20, 50]], snake: {x: 20, y: 50, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
 
     return {
-        DOM: state$.map(state => {
-            return svg('svg',
-                {
-                    class: 'game-map' + (state.dead ? ' game-map--dead' : ''),
-                    width: MAP_SIZE * SCALE,
-                    height: MAP_SIZE * SCALE,
-                },
-                state.map.map((row, x) =>
-                    row.map((cell, y) => {
-                        // row.filter(cell => cell) would be nice, but we loose the "y" index
-                        if (cell) {
-                            return svg('rect', {
-                                class: 'snake',
-                                x: x * SCALE,
-                                y: y * SCALE,
-                                width: SCALE,
-                                height: SCALE,
-                            })
-                        }
-                    })
-                )
-            )
-        })
+        DOM: state$.map(state =>
+            div([
+                div({className: 'fps'}, 'FPS: ' + state.fps),
+                drawWorld(state)
+            ])
+        )
     };
 }
 
