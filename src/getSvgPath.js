@@ -7,11 +7,10 @@ function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
   };
 }
 
-export default function describeArc(radius, P, Pa, startAngle, endAngle){
+export default function describeArc(radius, Pa, startAngle, endAngle){
     var arcSweep = endAngle - startAngle <= 180 ? "0" : "1";
 
     var d = [
-        "M", P.x, P.y,
         "A", radius, radius, 0, arcSweep, 0, Pa.x, Pa.y
     ].join(" ");
 

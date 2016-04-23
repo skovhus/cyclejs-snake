@@ -18,6 +18,7 @@ const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
 
 function drawWorld(state) {
+    console.log(state.trail.join(' '))
     return h('svg',
         {
             attrs: {
@@ -26,14 +27,12 @@ function drawWorld(state) {
                 height: MAP_SIZE * SCALE,
             }
         },
-        state.trail.map(pathD =>
-            h('path', {
-                attrs: {
-                    d: pathD,
-                    class: 'snake',
-                }
-            })
-        )
+        [h('path', {
+            attrs: {
+                d: state.trail.join(' '),
+                class: 'snake',
+            }
+        })]
     );
 }
 
@@ -95,7 +94,7 @@ function model(animation$, keysState$) {
         if(keysState.direction === DIRECTION_FORWARD) {
             newSnake.x = currentSnake.x + currentSnake.vx * STEP;
             newSnake.y = currentSnake.y + currentSnake.vy * STEP;
-            pathD = `M ${currentSnake.x} ${currentSnake.y} A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
+            pathD = `A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
         } else {
             // Turn
             const velocity = {
@@ -104,7 +103,7 @@ function model(animation$, keysState$) {
             };
 
             const arc = getArc(CURVE_RADIUS, STEP, keysState.direction, velocity, snakePoint);
-            pathD = getSvgPath(CURVE_RADIUS, currentSnake, arc.Pa, arc.startAngle, arc.endAngle);
+            pathD = getSvgPath(CURVE_RADIUS, arc.Pa, arc.startAngle, arc.endAngle);
 
             newSnake.x = arc.Pa.x;
             newSnake.y = arc.Pa.y;
@@ -125,7 +124,7 @@ function model(animation$, keysState$) {
             snake: newSnake,
             trail: newTrail,
         };
-    }, {trail: [], snake: {x: 100, y: 100, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
+    }, {trail: ['M 100 100'], snake: {x: 100, y: 100, vx: 1, vy: 0}, lastTick: new Date(), fps: 0});
 }
 
 function main(sources) {
