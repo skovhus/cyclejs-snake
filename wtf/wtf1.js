@@ -5,13 +5,16 @@ import {Observable} from 'rx';
 function main(sources) {
 
     sources.Keydown.map(k => {
-        // Why is this not logging:
+        // You would think should be logging, but it is not the case as nobody subscribes to
+        // this event stream.
         console.log('>>>', k);
-    })
+    });
 
     return {
         DOM: sources.Keydown
-            .map(i => h1('' + i + ' seconds elapsed'))
+            // Instead you should inject a console "do" statement here:
+            .do(k => console.log(k))
+            .map(i => h1(i.code + ''))
     };
 }
 

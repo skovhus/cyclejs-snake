@@ -9,7 +9,7 @@ JS_FILES       := $(JS_COMP_FILES)
 # Generel targets
 # ======================
 
-all: build
+all: dev
 
 clean:
 	-rm -rf .*.made build
@@ -34,6 +34,9 @@ endif
 	touch $@
 
 
+# build and develop
+# ======================
+
 build: build-js
 
 build-js: node_modules
@@ -44,4 +47,4 @@ dev: node_modules
 	node server.js
 
 
-.PHONY: build
+.PHONY: build dev build-js

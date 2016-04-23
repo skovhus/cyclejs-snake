@@ -1,8 +1,12 @@
 import Cycle from '@cycle/core';
-import {div, label, input, span, h1, makeDOMDriver} from '@cycle/dom';
+import {div, svg, makeDOMDriver} from '@cycle/dom';
 import {Observable} from 'rx';
-import {makeAnimationDriver} from 'cycle-animation-driver';
-import {range} from 'lodash';
+import requestAnimationFrame from 'raf';
+
+const FPS = 30;
+const SCALE = 2;
+const MAP_SIZE = 250;
+const INITAL_MAP = Array(MAP_SIZE).fill(0).map(() => Array(MAP_SIZE).fill(0));
 
 function main(sources) {
     const keyup$ = sources.Keyup
@@ -36,10 +40,12 @@ function main(sources) {
         };
     });
 
-    const initialMap = Array(50).fill(0).map(() => Array(50).fill(0));
-    const state$ = sources.animation.withLatestFrom(keysState$, (animationStuff, keysState) => {
-        return { animationStuff, keysState };
-    }).scan((previousState, {animationStuff, keysState}) => {
+    const animation$ = Observable.interval(1000 / FPS, requestAnimationFrame);
+
+    const state$ = animation$.withLatestFrom(keysState$, (_animationTick, keysState) => {
+        return keysState;
+    })
+    .scan((previousState, keysState) => {
         const newMap = previousState.map;
         const newSnake = Object.assign({}, previousState.snake);
         if(keysState.direction === 'RIGHT') {
@@ -49,7 +55,6 @@ function main(sources) {
             newSnake.vx = -previousState.snake.vy;
             newSnake.vy = previousState.snake.vx;
         }
-        console.log(keysState.direction, newSnake)
         newSnake.x += newSnake.vx;
         newSnake.y += newSnake.vy;
         newMap[newSnake.x][newSnake.y] = 1;
@@ -57,22 +62,31 @@ function main(sources) {
             map: newMap,
             snake: newSnake,
         };
-    }, {map: initialMap, snake: {x: 7, y: 5, vx: 1, vy: 0}});
+    }, {map: INITAL_MAP, snake: {x: 20, y: 50, vx: 1, vy: 0}});
 
     return {
         DOM: state$.map(state => {
-            return div(state.map.map(row => div(
-                { className: 'row' },
-                row.map(cell => div(
-                    {
-                        className: 'cell',
-                        style: {
-                            backgroundColor: cell ? 'black' : 'red'
+            return svg('svg',
+                {
+                    class: 'game-map',
+                    width: MAP_SIZE * SCALE,
+                    height: MAP_SIZE * SCALE,
+                },
+                state.map.map((row, x) =>
+                    row.map((cell, y) => {
+                        // row.filter(cell => cell) would be nice, but we loose the "y" index
+                        if (cell) {
+                            return svg('rect', {
+                                class: 'snake',
+                                x: x * SCALE,
+                                y: y * SCALE,
+                                width: SCALE,
+                                height: SCALE,
+                            })
                         }
-                    },
-                    ' '
-                ))
-            )))
+                    })
+                )
+            )
         })
     };
 }
@@ -81,5 +95,4 @@ Cycle.run(main, {
     DOM: makeDOMDriver('#main-container'),
     Keydown: () => Observable.fromEvent(document, 'keydown'),
     Keyup: () => Observable.fromEvent(document, 'keyup'),
-    animation: makeAnimationDriver(),
 });
