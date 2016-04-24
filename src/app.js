@@ -8,7 +8,7 @@ import getSvgPath from './getSvgPath';
 
 const FPS = 60;
 const SCALE = 1; // FIXME
-const MAP_SIZE = 1000;
+const MAP_SIZE = 800;
 
 const STEP = 3;
 const CURVE_RADIUS = 30;
@@ -38,12 +38,23 @@ function drawWorld(playersState) {
     );
 }
 
+function randomStartState(mapWidth, mapHeight) {
+    const getRandomInt = (min, max) => Math.floor(Math.random()*(max-min+1)+min);
+    const getRandomSign = () => Math.random() > 0.5 ? 1 : -1;
+    const Vx = getRandomSign() * Math.random();
+    const Vy = getRandomSign() * Math.sqrt(1 - Vx*Vx);
+    const startpoint = {
+        startPoint: {x: getRandomInt(mapWidth/3, 2*mapWidth/3), y: getRandomInt(mapHeight/3, 2*mapHeight/3)},
+        startVelocity: {x: Vx, y: Vy},
+    };
+    console.log(startpoint)
+    return startpoint;
+}
+
 const SNAKES_DATA = [
     {
         name: 'maciej',
         color: 'red',
-        startPoint: {x: 100, y: 100},
-        startVelocity: {x: 1, y: 0},
         keys: {
             left: 'ArrowLeft',
             right: 'ArrowRight',
@@ -52,8 +63,6 @@ const SNAKES_DATA = [
     {
         name: 'kenneth',
         color: 'yellow',
-        startPoint: {x: 150, y: 150},
-        startVelocity: {x: 0, y: 1},
         keys: {
             left: 'KeyS',
             right: 'KeyD',
@@ -63,6 +72,7 @@ const SNAKES_DATA = [
 
 function intent(Keyup, Keydown) {
     const snakes = SNAKES_DATA.map(snake => {
+        Object.assign(snake, randomStartState(MAP_SIZE * SCALE, MAP_SIZE * SCALE));
         const keyup$ = Keyup
             .filter(e => e.code === snake.keys.left || snake.keys.right)
             .map(e => ({ key: e.code, type: 'UP' }));
