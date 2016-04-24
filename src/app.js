@@ -17,38 +17,8 @@ const DIRECTION_RIGHT = -1;
 const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
 
-function drawWorld(playersState) {
-    return h('svg',
-        {
-            attrs: {
-                class: 'game-map',
-                width: MAP_SIZE * SCALE,
-                height: MAP_SIZE * SCALE,
-            }
-        },
-        playersState.map(playerState =>
-            h('path', {
-                attrs: {
-                    d: playerState.trail.join(' '),
-                    style: `stroke: ${playerState.snake.color}`,
-                    class: 'snake',
-                }
-            })
-        )
-    );
-}
-
-function randomStartState(mapWidth, mapHeight) {
-    const getRandomInt = (min, max) => Math.floor(Math.random()*(max-min+1)+min);
-    const getRandomSign = () => Math.random() > 0.5 ? 1 : -1;
-    const Vx = getRandomSign() * Math.random();
-    const Vy = getRandomSign() * Math.sqrt(1 - Vx*Vx);
-    const startpoint = {
-        startPoint: {x: getRandomInt(mapWidth/3, 2*mapWidth/3), y: getRandomInt(mapHeight/3, 2*mapHeight/3)},
-        startVelocity: {x: Vx, y: Vy},
-    };
-    return startpoint;
-}
+const getRandomInt = (min, max) => Math.floor(Math.random()*(max-min+1)+min);
+const getRandomSign = () => Math.random() > 0.5 ? 1 : -1;
 
 const SNAKES_DATA = [
     {
@@ -67,7 +37,48 @@ const SNAKES_DATA = [
             right: 'KeyD',
         }
     }
-]
+];
+
+function drawWorld(values) {
+    const snakes = values.slice(0, SNAKES_DATA.length).map(playerState =>
+        h('path', {
+            attrs: {
+                d: playerState.trail.join(' '),
+                style: `stroke: ${playerState.snake.color}`,
+                class: 'snake',
+            }
+        })
+    );
+    const bonuses = values.pop().map(bonus => h('circle', {
+        attrs: {
+            cx: bonus.x,
+            cy: bonus.y,
+            r: '10',
+            stroke: 'limegreen',
+            fill: 'limegreen'
+        }
+    }));
+    return h('svg',
+        {
+            attrs: {
+                class: 'game-map',
+                width: MAP_SIZE * SCALE,
+                height: MAP_SIZE * SCALE,
+            }
+        },
+        snakes.concat(bonuses),
+    );
+}
+
+function randomStartState(mapWidth, mapHeight) {
+    const Vx = getRandomSign() * Math.random();
+    const Vy = getRandomSign() * Math.sqrt(1 - Vx*Vx);
+    const startpoint = {
+        startPoint: {x: getRandomInt(mapWidth/3, 2*mapWidth/3), y: getRandomInt(mapHeight/3, 2*mapHeight/3)},
+        startVelocity: {x: Vx, y: Vy},
+    };
+    return startpoint;
+}
 
 function intent(Keyup, Keydown) {
     const snakes = SNAKES_DATA.map(snake => {
@@ -112,14 +123,15 @@ function intent(Keyup, Keydown) {
     }
 }
 
-function model(animation$, snakes) {
+function model(animation$, snakes, bonuses$) {
     return snakes.map(snake => {
-        return animation$.withLatestFrom(snake.keys$, (_animationTick, keysState) => keysState)
-        .scan((previousState, keysState) => {
+        return animation$.withLatestFrom(snake.keys$, bonuses$, (_animationTick, keysState, bonuses) => ({keysState, bonuses}))
+        .scan((previousState, partialStates) => {
+            const keysState = partialStates.keysState;
+            const bonuses = partialStates.bonuses;
             if (previousState.dead) {
                 return previousState;
             }
-
             const now = new Date();
             const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
 
@@ -151,6 +163,16 @@ function model(animation$, snakes) {
                 newSnake.vy = arc.Va.y;
             }
 
+
+            bonuses.forEach(bonus => {
+                const x = newSnake.x - bonus.x;
+                const y = newSnake.y - bonus.y;
+                const distance = Math.sqrt(x*x + y*y);
+                if (distance < 10) {
+                    console.log("WOOOT", distance)
+                }
+            });
+
             /* Crude collision detection */
             const COLLISION_THRESHOLD = 2.3; // Higher report false positives
             function toVisitedPoint(position) {
@@ -163,6 +185,7 @@ function model(animation$, snakes) {
             const collision = visited.has(visitedPoint);
 
             if (outsideMap || collision) {
+                console.log(visitedPoint, visited)
                 dead = true;
             } else {
                 newTrail.push(pathD);
@@ -194,11 +217,34 @@ function model(animation$, snakes) {
     })
 }
 
+function getBonuses() {
+    return Observable.interval(100000 / FPS, requestAnimationFrame).scan((bonuses, tick) => {
+        return [{
+            x: 100,
+            y: 100
+        }]
+        const newBonus = {
+            x: getRandomInt(10, MAP_SIZE * SCALE - 10),
+            y: getRandomInt(10, MAP_SIZE * SCALE - 10),
+            created: tick,
+        };
+        const nextBonuses = bonuses.filter(bonus => {
+            return tick - bonus.created < 4;
+        })
+        if(Math.random() > 0.5)
+            return [...nextBonuses, newBonus];
+        else {
+            return nextBonuses;
+        }
+    }, []);
+}
+
 function main(sources) {
     const { animation$, snakes } = intent(sources.Keyup, sources.Keydown);
-    const playersStates = model(animation$, snakes);
+    const bonuses$ = getBonuses();
+    const playersStates = model(animation$, snakes, bonuses$);
 
-    const snakes$ = Observable.combineLatest(...playersStates).map(playersState => drawWorld(playersState))
+    const snakes$ = Observable.combineLatest(...playersStates, bonuses$).map(playersState => drawWorld(playersState))
 
     return {
         DOM: snakes$.map(snakes =>
