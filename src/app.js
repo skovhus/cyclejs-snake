@@ -47,7 +47,6 @@ function randomStartState(mapWidth, mapHeight) {
         startPoint: {x: getRandomInt(mapWidth/3, 2*mapWidth/3), y: getRandomInt(mapHeight/3, 2*mapHeight/3)},
         startVelocity: {x: Vx, y: Vy},
     };
-    console.log(startpoint)
     return startpoint;
 }
 
