@@ -218,7 +218,7 @@ function model(animation$, snakes, bonuses$) {
 }
 
 function getBonuses() {
-    return Observable.interval(100000 / FPS, requestAnimationFrame).scan((bonuses, tick) => {
+    return Observable.interval(100000 / FPS, requestAnimationFrame).startWith(0).scan((bonuses, tick) => {
         return [{
             x: 100,
             y: 100
