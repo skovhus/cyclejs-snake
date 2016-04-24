@@ -11,11 +11,13 @@ const SCALE = 1; // FIXME
 const MAP_SIZE = 800;
 
 const STEP = 3;
-const CURVE_RADIUS = 30;
+const CURVE_RADIUS = 40;
 
 const DIRECTION_RIGHT = -1;
 const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
+
+const COLLISION_THRESHOLD = 2.3; // Higher report false positives
 
 const getRandomInt = (min, max) => Math.floor(Math.random()*(max-min+1)+min);
 const getRandomSign = () => Math.random() > 0.5 ? 1 : -1;
@@ -39,17 +41,17 @@ const SNAKES_DATA = [
     }
 ];
 
-function drawWorld(values) {
-    const snakes = values.slice(0, SNAKES_DATA.length).map(playerState =>
+function drawWorld(state) {
+    const snakes = state.snakes.map(snake =>
         h('path', {
             attrs: {
-                d: playerState.trail.join(' '),
-                style: `stroke: ${playerState.snake.color}`,
+                d: snake.trail.join(' '),
+                style: `stroke: ${snake.color}`,
                 class: 'snake',
             }
         })
     );
-    const bonuses = values.pop().map(bonus => h('circle', {
+    const bonuses = state.bonuses.map(bonus => h('circle', {
         attrs: {
             cx: bonus.x,
             cy: bonus.y,
@@ -74,15 +76,16 @@ function randomStartState(mapWidth, mapHeight) {
     const Vx = getRandomSign() * Math.random();
     const Vy = getRandomSign() * Math.sqrt(1 - Vx*Vx);
     const startpoint = {
-        startPoint: {x: getRandomInt(mapWidth/3, 2*mapWidth/3), y: getRandomInt(mapHeight/3, 2*mapHeight/3)},
-        startVelocity: {x: Vx, y: Vy},
+        x: getRandomInt(mapWidth/3, 2*mapWidth/3),
+        y: getRandomInt(mapHeight/3, 2*mapHeight/3),
+        vx: Vx,
+        vy: Vy,
     };
     return startpoint;
 }
 
 function intent(Keyup, Keydown) {
-    const snakes = SNAKES_DATA.map(snake => {
-        Object.assign(snake, randomStartState(MAP_SIZE * SCALE, MAP_SIZE * SCALE));
+    const snakesDirections = SNAKES_DATA.map(snake => {
         const keyup$ = Keyup
             .filter(e => e.code === snake.keys.left || snake.keys.right)
             .map(e => ({ key: e.code, type: 'UP' }));
@@ -99,161 +102,135 @@ function intent(Keyup, Keydown) {
             }), {})
             .startWith({});
 
-        const playerKeys$ = areKeysDown$.map(areKeysDown => {
+        return areKeysDown$.map(areKeysDown => {
             let direction = DIRECTION_FORWARD;
             if(areKeysDown[snake.keys.left] && !areKeysDown[snake.keys.right]) {
                 direction = DIRECTION_LEFT;
             } else if(!areKeysDown[snake.keys.left] && areKeysDown[snake.keys.right]) {
                 direction = DIRECTION_RIGHT;
             }
-            return {
-                left: areKeysDown[snake.keys.left],
-                right: areKeysDown[snake.keys.right],
-                direction
-            };
+            return direction;
         });
-
-        return Object.assign({}, snake, { keys$: playerKeys$ });
     })
 
-    const animation$ = Observable.interval(1000 / FPS, requestAnimationFrame);
+    const newBonuses$ = Observable.interval(100000 / FPS, requestAnimationFrame)
+        .startWith(0)
+        .filter(() => Math.random() > 0.5)
+        .map(() => {
+            return {
+                x: getRandomInt(10, MAP_SIZE * SCALE - 10),
+                y: getRandomInt(10, MAP_SIZE * SCALE - 10),
+                created: Date.now(),
+            };
+    });
+
+    const snakesDirections$ = Observable.combineLatest(...snakesDirections)
+    const animation$ = Observable.interval(1000 / FPS, requestAnimationFrame).startWith(0);
 
     return {
-        animation$, snakes
+        animation$, snakesDirections$, newBonuses$
     }
 }
 
-function model(animation$, snakes, bonuses$) {
-    return snakes.map(snake => {
-        return animation$.withLatestFrom(snake.keys$, bonuses$, (_animationTick, keysState, bonuses) => ({keysState, bonuses}))
-        .scan((previousState, partialStates) => {
-            const keysState = partialStates.keysState;
-            const bonuses = partialStates.bonuses;
-            if (previousState.dead) {
-                return previousState;
-            }
-            const now = new Date();
-            const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
+function snakeModel(previousState) {
+    if (previousState.isDead) {
+        return previousState;
+    }
 
-            const currentSnake = previousState.snake;
-            const newTrail = previousState.trail;
-            const newSnake = Object.assign({}, previousState.snake);
-            const snakePoint = {x: newSnake.x, y: newSnake.y};
+    const headPoint = {
+        x: previousState.x,
+        y: previousState.y,
+    };
+    const velocity = {
+        x: previousState.vx,
+        y: previousState.vy,
+    }
 
-            let pathD;
-            let dead = false;
+    let pathCommand;
+    const nextState = Object.assign({}, previousState);
 
-            if(keysState.direction === DIRECTION_FORWARD) {
-                newSnake.x = currentSnake.x + currentSnake.vx * STEP;
-                newSnake.y = currentSnake.y + currentSnake.vy * STEP;
-                pathD = `A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
-            } else {
-                // Turning
-                const velocity = {
-                    x: newSnake.vx,
-                    y: newSnake.vy
-                };
+    if(previousState.direction === DIRECTION_FORWARD) {
+        nextState.x = headPoint.x + velocity.x * STEP;
+        nextState.y = headPoint.y + velocity.y * STEP;
+        pathCommand = `A 0 0 0 0 0 ${nextState.x} ${nextState.y}`;
+    } else {
+        const arc = getArc(CURVE_RADIUS, STEP, previousState.direction, velocity, headPoint);
+        pathCommand = getSvgPath(CURVE_RADIUS, arc.Pa, arc.startAngle, arc.endAngle);
 
-                const arc = getArc(CURVE_RADIUS, STEP, keysState.direction, velocity, snakePoint);
-                pathD = getSvgPath(CURVE_RADIUS, arc.Pa, arc.startAngle, arc.endAngle);
+        nextState.x = arc.Pa.x;
+        nextState.y = arc.Pa.y;
+        nextState.vx = arc.Va.x;
+        nextState.vy = arc.Va.y;
+    }
+    nextState.trail.push(pathCommand);
 
-                newSnake.x = arc.Pa.x;
-                newSnake.y = arc.Pa.y;
-                newSnake.vx = arc.Va.x;
-                newSnake.vy = arc.Va.y;
-            }
-
-
-            bonuses.forEach(bonus => {
-                const x = newSnake.x - bonus.x;
-                const y = newSnake.y - bonus.y;
-                const distance = Math.sqrt(x*x + y*y);
-                if (distance < 10) {
-                    console.log("WOOOT", distance)
-                }
-            });
-
-            /* Crude collision detection */
-            const COLLISION_THRESHOLD = 2.3; // Higher report false positives
-            function toVisitedPoint(position) {
-                return `${Math.floor(position.x/COLLISION_THRESHOLD)}:${Math.floor(position.y/COLLISION_THRESHOLD)}`;
-            }
-
-            const visited = previousState.visited;
-            const visitedPoint = toVisitedPoint(newSnake);
-            const outsideMap = newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE || newSnake.y > MAP_SIZE;
-            const collision = visited.has(visitedPoint);
-
-            if (outsideMap || collision) {
-                console.log(visitedPoint, visited)
-                dead = true;
-            } else {
-                newTrail.push(pathD);
-                visited.add(visitedPoint);
-            }
-
-            return {
-                dead: dead,
-                fps: fps,
-                lastTick: now,
-                snake: newSnake,
-                trail: newTrail,
-                visited: visited,
-            };
-        }, {
-            trail: [`M ${snake.startPoint.x} ${snake.startPoint.y}`],
-            visited: new Set(),
-            snake: {
-                x: snake.startPoint.x,
-                y: snake.startPoint.y,
-                vx: snake.startVelocity.x,
-                vy: snake.startVelocity.y,
-                name: snake.name,
-                color: snake.color,
-            },
-            lastTick: new Date(),
-            fps: 0
-        });
-    })
+    return nextState;
 }
 
-function getBonuses() {
-    return Observable.interval(100000 / FPS, requestAnimationFrame).startWith(0).scan((bonuses, tick) => {
-        return [{
-            x: 100,
-            y: 100
-        }]
-        const newBonus = {
-            x: getRandomInt(10, MAP_SIZE * SCALE - 10),
-            y: getRandomInt(10, MAP_SIZE * SCALE - 10),
-            created: tick,
-        };
-        const nextBonuses = bonuses.filter(bonus => {
-            return tick - bonus.created < 4;
-        })
-        if(Math.random() > 0.5)
-            return [...nextBonuses, newBonus];
-        else {
-            return nextBonuses;
+function bonusModel(snakes, bonus) {
+    return snakes.some(snake => {
+        const x = newSnake.x - bonus.x;
+        const y = newSnake.y - bonus.y;
+        const distance = Math.sqrt(x*x + y*y);
+        if (distance < 10) {
+            return true;
         }
-    }, []);
+    });
+}
+
+function modelUpdates(animation$, snakesDirections$, newBonuses$) {
+    const snakesStateUpdates$ = animation$
+        .withLatestFrom(snakesDirections$, (_animationTick, snakesDirections) => snakesDirections)
+        .map(snakesDirections => function(state) {
+            const now = new Date();
+            const fps = Math.round(1000 / (now - state.lastTick) / 5 ) * 5;
+            const nextSnakes = state.snakes
+                .map((snake, index) => {
+                    snake.direction = snakesDirections[index];
+                    return snake;
+                })
+                .map(snakeModel);
+
+            return Object.assign({}, state, {
+                fps,
+                lastTick: new Date(),
+                snakes: nextSnakes,
+            });
+        });
+
+    const bonusesStateUpdates$ = newBonuses$.map(bonus => function(state) {
+        return Object.assign({}, state, {
+            bonuses: [...state.bonuses, bonus],
+        });
+    });
+
+    return Observable.merge(snakesStateUpdates$, bonusesStateUpdates$);
+}
+
+function model(animation$, snakesDirections$, newBonuses$) {
+    const initialState = {
+        snakes: SNAKES_DATA.map(snake => {
+            const initialPosition = randomStartState(MAP_SIZE * SCALE, MAP_SIZE * SCALE);
+            return Object.assign(snake, initialPosition, {
+                trail: [`M ${initialPosition.x} ${initialPosition.y}`],
+            });
+        }),
+        bonuses: [],
+        lastTick: new Date(),
+        fps: 0
+    };
+    const updates$ = modelUpdates(animation$, snakesDirections$, newBonuses$);
+    const state$ = updates$
+        .startWith(initialState)
+        .scan((state, update) => update(state));
+    return state$;
 }
 
 function main(sources) {
-    const { animation$, snakes } = intent(sources.Keyup, sources.Keydown);
-    const bonuses$ = getBonuses();
-    const playersStates = model(animation$, snakes, bonuses$);
-
-    const snakes$ = Observable.combineLatest(...playersStates, bonuses$).map(playersState => drawWorld(playersState))
-
-    return {
-        DOM: snakes$.map(snakes =>
-            h('div', [
-                // h('div', {props: {className: 'fps'}}, 'FPS: ' + state.fps),
-                snakes
-            ])
-        )
-    };
+    const { animation$, snakesDirections$, newBonuses$ } = intent(sources.Keyup, sources.Keydown);
+    const state$ = model(animation$, snakesDirections$, newBonuses$);
+    const vdom$ = state$.map(state => drawWorld(state));
+    return { DOM: vdom$ };
 }
 
 Cycle.run(main, {
