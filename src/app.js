@@ -116,6 +116,10 @@ function model(animation$, snakes) {
     return snakes.map(snake => {
         return animation$.withLatestFrom(snake.keys$, (_animationTick, keysState) => keysState)
         .scan((previousState, keysState) => {
+            if (previousState.dead) {
+                return previousState;
+            }
+
             const now = new Date();
             const fps = Math.round(1000 / (now - previousState.lastTick) / 5 ) * 5;
 
@@ -132,7 +136,7 @@ function model(animation$, snakes) {
                 newSnake.y = currentSnake.y + currentSnake.vy * STEP;
                 pathD = `A 0 0 0 0 0 ${newSnake.x} ${newSnake.y}`;
             } else {
-                // Turn
+                // Turning
                 const velocity = {
                     x: newSnake.vx,
                     y: newSnake.vy
@@ -147,10 +151,22 @@ function model(animation$, snakes) {
                 newSnake.vy = arc.Va.y;
             }
 
-            if (newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE || newSnake.y > MAP_SIZE ) {
+            /* Crude collision detection */
+            const COLLISION_THRESHOLD = 2.3; // Higher report false positives
+            function toVisitedPoint(position) {
+                return `${Math.floor(position.x/COLLISION_THRESHOLD)}:${Math.floor(position.y/COLLISION_THRESHOLD)}`;
+            }
+
+            const visited = previousState.visited;
+            const visitedPoint = toVisitedPoint(newSnake);
+            const outsideMap = newSnake.x < 0 || newSnake.y < 0 || newSnake.x > MAP_SIZE || newSnake.y > MAP_SIZE;
+            const collision = visited.has(visitedPoint);
+
+            if (outsideMap || collision) {
                 dead = true;
             } else {
                 newTrail.push(pathD);
+                visited.add(visitedPoint);
             }
 
             return {
@@ -159,9 +175,11 @@ function model(animation$, snakes) {
                 lastTick: now,
                 snake: newSnake,
                 trail: newTrail,
+                visited: visited,
             };
         }, {
             trail: [`M ${snake.startPoint.x} ${snake.startPoint.y}`],
+            visited: new Set(),
             snake: {
                 x: snake.startPoint.x,
                 y: snake.startPoint.y,
