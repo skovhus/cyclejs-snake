@@ -17,6 +17,8 @@ const DIRECTION_RIGHT = -1;
 const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
 
+const BONUS_LIFE = 4000;
+
 const COLLISION_THRESHOLD = 2.3; // Higher report false positives
 
 const getRandomInt = (min, max) => Math.floor(Math.random()*(max-min+1)+min);
@@ -198,13 +200,22 @@ function modelUpdates(animation$, snakesDirections$, newBonuses$) {
             });
         });
 
-    const bonusesStateUpdates$ = newBonuses$.map(bonus => function(state) {
+    const newBonusesUpdates$ = newBonuses$.map(newBonus => function(state) {
         return Object.assign({}, state, {
-            bonuses: [...state.bonuses, bonus],
+            bonuses: [...state.bonuses, newBonus],
         });
     });
 
-    return Observable.merge(snakesStateUpdates$, bonusesStateUpdates$);
+    const staleBonusesUpdates$ = animation$.map(() => function(state) {
+        const remainingBonuses = state.bonuses.filter(bonus => {
+            return Date.now() - bonus.created < BONUS_LIFE;
+        });
+        return Object.assign({}, state, {
+            bonuses: remainingBonuses,
+        });
+    });
+
+    return Observable.merge(snakesStateUpdates$, newBonusesUpdates$, staleBonusesUpdates$);
 }
 
 function model(animation$, snakesDirections$, newBonuses$) {
