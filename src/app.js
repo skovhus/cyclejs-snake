@@ -10,14 +10,14 @@ const FPS = 60;
 const SCALE = 1; // FIXME
 const MAP_SIZE = 800;
 
-const STEP = 3;
-const CURVE_RADIUS = 40;
+const STEP = 2;
+const CURVE_RADIUS = 30;
 
 const DIRECTION_RIGHT = -1;
 const DIRECTION_LEFT = 1;
 const DIRECTION_FORWARD = 0;
 
-const BONUS_LIFE = 4000;
+const BONUS_LIFE = 6000;
 
 const COLLISION_THRESHOLD = 2.3; // Higher report false positives
 
@@ -169,17 +169,6 @@ function snakeModel(previousState) {
     return nextState;
 }
 
-function bonusModel(snakes, bonus) {
-    return snakes.some(snake => {
-        const x = newSnake.x - bonus.x;
-        const y = newSnake.y - bonus.y;
-        const distance = Math.sqrt(x*x + y*y);
-        if (distance < 10) {
-            return true;
-        }
-    });
-}
-
 function modelUpdates(animation$, snakesDirections$, newBonuses$) {
     const snakesStateUpdates$ = animation$
         .withLatestFrom(snakesDirections$, (_animationTick, snakesDirections) => snakesDirections)
@@ -207,9 +196,18 @@ function modelUpdates(animation$, snakesDirections$, newBonuses$) {
     });
 
     const staleBonusesUpdates$ = animation$.map(() => function(state) {
-        const remainingBonuses = state.bonuses.filter(bonus => {
-            return Date.now() - bonus.created < BONUS_LIFE;
-        });
+        const remainingBonuses = state.bonuses
+            .filter(bonus => {
+                return Date.now() - bonus.created < BONUS_LIFE;
+            })
+            .filter(bonus => state.snakes.every(snake => {
+                const x = snake.x - bonus.x;
+                const y = snake.y - bonus.y;
+                const distance = Math.sqrt(x*x + y*y);
+                if (distance > 10) {
+                    return true;
+                }
+            }));
         return Object.assign({}, state, {
             bonuses: remainingBonuses,
         });
