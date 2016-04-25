@@ -48,18 +48,20 @@ function drawWorld(state) {
         h('path', {
             attrs: {
                 d: snake.trail.join(' '),
-                style: `stroke: ${snake.color}`,
+                style: `stroke: ${snake.color}; opacity: ${snake.isDead ? '0.5' : '1'};`,
                 class: 'snake',
             }
         })
     );
     const bonuses = state.bonuses.map(bonus => h('circle', {
         attrs: {
+            key: bonus.created,
             cx: bonus.x,
             cy: bonus.y,
+            fill: bonus.eatenBy ? bonus.eatenBy.color : 'limegreen',
+            stroke: bonus.eatenBy ? bonus.eatenBy.color : 'limegreen',
             r: '10',
-            stroke: 'limegreen',
-            fill: 'limegreen'
+            class: bonus.eatenBy ? 'bonus--eaten' : 'bonus',
         }
     }));
     return h('svg',
@@ -189,6 +191,23 @@ function modelUpdates(animation$, snakesDirections$, newBonuses$) {
             });
         });
 
+    const wallCollisionUpdates$ = animation$.map(() => function(state) {
+        const snakes = state.snakes.map(snake => {
+            if(!snake.isDead && (
+                snake.x > MAP_SIZE ||
+                snake.x < 0 ||
+                snake.y > MAP_SIZE ||
+                snake.y < 0
+            )) {
+                return Object.assign({}, snake, {
+                    isDead: true,
+                });
+            }
+            return snake;
+        });
+        return Object.assign({}, state, { snakes });
+    });
+
     const newBonusesUpdates$ = newBonuses$.map(newBonus => function(state) {
         return Object.assign({}, state, {
             bonuses: [...state.bonuses, newBonus],
@@ -197,23 +216,33 @@ function modelUpdates(animation$, snakesDirections$, newBonuses$) {
 
     const staleBonusesUpdates$ = animation$.map(() => function(state) {
         const remainingBonuses = state.bonuses
-            .filter(bonus => {
-                return Date.now() - bonus.created < BONUS_LIFE;
-            })
-            .filter(bonus => state.snakes.every(snake => {
-                const x = snake.x - bonus.x;
-                const y = snake.y - bonus.y;
-                const distance = Math.sqrt(x*x + y*y);
-                if (distance > 10) {
-                    return true;
+            .map(bonus => {
+                if(bonus.eatenBy) {
+                    return bonus;
                 }
-            }));
+                const eatenBy = state.snakes.find(snake => {
+                    const x = snake.x - bonus.x;
+                    const y = snake.y - bonus.y;
+                    const distance = Math.sqrt(x*x + y*y);
+                    return distance < 10;
+                });
+                return Object.assign({}, bonus, {
+                    eatenBy,
+                    eatenAt: Date.now(),
+                });
+            })
+            .filter(bonus => {
+                if (bonus.eatenBy) {
+                    return Date.now() - bonus.eatenAt < 1000;
+                }
+                return Date.now() - bonus.created < BONUS_LIFE;
+            });
         return Object.assign({}, state, {
             bonuses: remainingBonuses,
         });
     });
 
-    return Observable.merge(snakesStateUpdates$, newBonusesUpdates$, staleBonusesUpdates$);
+    return Observable.merge(snakesStateUpdates$, wallCollisionUpdates$, newBonusesUpdates$, staleBonusesUpdates$);
 }
 
 function model(animation$, snakesDirections$, newBonuses$) {
